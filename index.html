@@ -1,0 +1,207 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Scientific Lab in Browser</title>
+  <script src="build/libv86.js"></script>
+</head>
+
+<body>
+<div id="screen_container">
+  <div style="white-space: pre; font: 14px monospace; line-height: 14px"></div>
+  <canvas></canvas>
+</div>
+
+<div style="margin-top: 10px;">
+  <label for="upload_path">Upload to Absolute Path: </label>
+  <input type="text" id="upload_path" value="/root/" style="width: 150px;">
+  <input type="file" id="btn_upload_files" multiple>
+  <br><br>
+  <label>Download from Absolute Path: </label>
+  <input type="text" id="download_path" value="/root/example.txt" style="width: 200px;">
+  <button id="btn_download_file">Download File</button>
+</div>
+
+<hr>
+
+<h3>How to Enable Network?</h3>
+<p>Type the following in the xfce terminal: <pre><code>sudo dhclient enp0s5</code></pre></p>
+
+<hr>
+
+<h3>Available Software:</h3>
+<h4>Biology</h4>
+<p>seaview jemboss bedtools critterding neuron samtools bcftools bwa cd-hit</p>
+
+<h4>Chemistry</h4>
+<p>xdrawchem quantum-espresso nwchem avogadro pymol ghemical bkchem adun.app garlic jmol apbs atomes chemtool cp2k drawxtl mopac7-bin mpqc openbabel-gui pdb2pqr tandem-mass</p>
+
+<h4>Electronics</h4>
+<p>kicad fritzing simulide</p>
+
+<h4>Engineering</h4>
+<p>freecad librecad calculix-cgx calculix-ccx gmsh sumo openfoam</p>
+
+<h4>Geography</h4>
+<p>qgis grass-gui</p>
+
+<h4>Geometry</h4>
+<p>geogebra polymake carmetal</p>
+
+<h4>Image Analysis</h4>
+<p>imagej gwyddion</p>
+
+<h4>Logic</h4>
+<p>coq z3 tkgate gprolog</p>
+
+<h4>Machine Learning</h4>
+<p>weka</p>
+
+<h4>Mathematics</h4>
+<p>sagemath wxmaxima gap macaulay2 singular pari-gp 4ti2 coinor-cbc coinor-csdp</p>
+
+<h4>Meteorology</h4>
+<p>cdo ferret</p>
+
+<h4>Numerical Computation</h4>
+<p>octave gnudatalanguage jupyter-notebook</p>
+
+<h4>Physics</h4>
+<p>yade opticalraytracer abinit cadabra2 gerris v-sim liggghts lammps getdp esys-particle z88</p>
+
+<h4>Statistics</h4>
+<p>rkward pspp jags fityk</p>
+
+<h4>Typesetting</h4>
+<p>texlive-base texlive-science texlive-pictures texstudio lyx ipe jabref</p>
+
+<h4>Viewing</h4>
+<p>paraview grace veusz gnuplot-qt mathgl labplot udav geomview xyscan povray</p>
+
+<h4>Utilities</h4>
+<p>xournal planner abiword gnumeric pandoc cmake git tmux mc htop vim nano p7zip-full geany mousepad atril engrampa artha openmpi-bin python3-pip curl build-essential ffmpeg</p>
+<hr>
+
+<h3>Troubleshooting:</h3>
+<h4>Avogadro failed to launch:</h4>
+<p>Launch it by running <code>LIBGL_ALWAYS_SOFTWARE=1 avogadro</code> in the terminal.</p>
+
+<hr>
+<h3>Credit</h3>
+<p>v86: https://github.com/copy/v86</p>
+<p>All opensource software installed</p>
+<script>
+"use strict";
+
+/**
+ * Load debian-state-base.bin.part1, part2, ...
+ * Merge into a single Blob and return a Blob URL
+ */
+async function createStateBlobUrl(baseName) {
+    const parts = [];
+    let index = 1;
+
+    while (true) {
+        const url = `${baseName}.part${index}`;
+        try {
+            const resp = await fetch(url);
+            if (!resp.ok) break;
+            parts.push(await resp.arrayBuffer());
+            index++;
+        } catch (e) {
+            break;
+        }
+    }
+
+    const blob = new Blob(parts, { type: "application/octet-stream" });
+    return URL.createObjectURL(blob);
+}
+
+window.onload = async function () {
+    try {
+        const screen = document.getElementById("screen_container");
+
+        // Merge the split state file
+        const stateUrl = await createStateBlobUrl(
+            "images/debian-state-base.bin"
+        );
+
+        // Start v86
+        const emulator = new V86({
+            wasm_path: "build/v86.wasm",
+            memory_size: 1636 * 1024 * 1024,
+            vga_memory_size: 8 * 1024 * 1024,
+            screen_container: screen,
+
+            // IMPORTANT: use merged Blob URL here
+            initial_state: { url: stateUrl },
+
+            filesystem: {
+                baseurl: "images/debian-9p-rootfs-flat/"
+            },
+
+            network_relay_url: "wss://relay.widgetry.org/",
+            autostart: true,
+        });
+
+        // Add pointer lock listener to fix mouse tracking
+        const canvas = document.querySelector("canvas");
+        canvas.addEventListener("click", function() {
+            canvas.requestPointerLock();
+        });
+
+        document.getElementById("btn_upload_files").onchange = function(e) {
+            var files = e.target.files;
+            var path = document.getElementById("upload_path").value;
+            if (path.slice(0, 1) !== "/") path = "/" + path;
+            if (path.slice(-1) !== "/") path += "/";
+
+            for(var i=0; i<files.length; i++) {
+                var reader = new FileReader();
+                reader.onload = function(file) {
+                    return function(e) {
+                        var data = (new TextEncoder('UTF-8')).encode(e.target.result);
+                        emulator.create_file(path + file.name, data);
+                        console.log("uploaded " + file.name + " to " + path + file.name);
+                    }
+                }(files[i]);
+                reader.readAsText(files[i]);
+            }
+            this.blur();
+            screen.focus();
+        };
+        
+        document.getElementById("btn_download_file").onclick = async function() {
+            const path = document.getElementById("download_path").value;
+            if (path.slice(0, 1) !== "/") path = "/" + path;
+            try {
+                const data = await emulator.read_file(path);
+                if (data) {
+                    const blob = new Blob([data], { type: "application/octet-stream" });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = path.split('/').pop();
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                } else {
+                    alert("File not found: " + path);
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Error reading file (File might not exist).");
+            }
+            this.blur();
+            screen.focus();
+        };
+
+    } catch (e) {
+        console.error(e);
+        alert("Failed to load Debian state: " + e.message);
+    }
+};
+</script>
+</body>
+</html>
