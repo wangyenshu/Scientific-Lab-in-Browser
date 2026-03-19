@@ -7,153 +7,125 @@
 </head>
 
 <body>
-<div id="screen_container">
+<div id="screen_container" tabindex="0" style="outline: none;">
   <div style="white-space: pre; font: 14px monospace; line-height: 14px"></div>
-  <canvas></canvas>
+  <canvas style="display: none"></canvas>
 </div>
 
 <div style="margin-top: 10px;">
   <label for="upload_path">Upload to Absolute Path: </label>
   <input type="text" id="upload_path" value="/root/" style="width: 150px;">
-  <input type="file" id="btn_upload_files" multiple>
+  <input type="file" id="upload_files" multiple>
+
   <br><br>
-  <label>Download from Absolute Path: </label>
+
+  <label>GitHub Repo URL: </label>
+  <input type="text" id="repo_url" placeholder="https://github.com/user/repo" style="width: 200px;">
+  
+  <label>Branch: </label>
+  <input type="text" id="repo_branch" value="master" style="width: 80px;">
+
+  <label>Import into Absolute Path: </label>
+  <input type="text" id="repo_import_path" value="/root/" style="width: 100px;">
+
+  <button id="btn_import_repo">Import Repo</button>
+  <span id="import_status" style="margin-left: 10px; font-size: 0.9em;"></span>
+  
+  <br><br>
+  <label>Download File Absolute Path: </label>
   <input type="text" id="download_path" value="/root/example.txt" style="width: 200px;">
   <button id="btn_download_file">Download File</button>
 </div>
 
-<hr>
-
-<h3>How to Enable Network?</h3>
-<p>Type the following in the xfce terminal: <pre><code>sudo dhclient enp0s5</code></pre></p>
-
-<hr>
-
-<h3>Available Software:</h3>
-<h4>Biology</h4>
-<p>seaview jemboss bedtools critterding neuron samtools bcftools bwa cd-hit</p>
-
-<h4>Chemistry</h4>
-<p>xdrawchem quantum-espresso nwchem avogadro pymol ghemical bkchem adun.app garlic jmol apbs atomes chemtool cp2k drawxtl mopac7-bin mpqc openbabel-gui pdb2pqr tandem-mass</p>
-
-<h4>Electronics</h4>
-<p>kicad fritzing simulide</p>
-
-<h4>Engineering</h4>
-<p>freecad librecad calculix-cgx calculix-ccx gmsh sumo openfoam</p>
-
-<h4>Geography</h4>
-<p>qgis grass-gui</p>
-
-<h4>Geometry</h4>
-<p>geogebra polymake carmetal</p>
-
-<h4>Image Analysis</h4>
-<p>imagej gwyddion</p>
-
-<h4>Logic</h4>
-<p>coq z3 tkgate gprolog</p>
-
-<h4>Machine Learning</h4>
-<p>weka</p>
-
-<h4>Mathematics</h4>
-<p>sagemath wxmaxima gap macaulay2 singular pari-gp 4ti2 coinor-cbc coinor-csdp</p>
-
-<h4>Meteorology</h4>
-<p>cdo ferret</p>
-
-<h4>Numerical Computation</h4>
-<p>octave gnudatalanguage jupyter-notebook</p>
-
-<h4>Physics</h4>
-<p>yade opticalraytracer abinit cadabra2 gerris v-sim liggghts lammps getdp esys-particle z88</p>
-
-<h4>Statistics</h4>
-<p>rkward pspp jags fityk</p>
-
-<h4>Typesetting</h4>
-<p>texlive-base texlive-science texlive-pictures texstudio lyx ipe jabref</p>
-
-<h4>Viewing</h4>
-<p>paraview grace veusz gnuplot-qt mathgl labplot udav geomview xyscan povray</p>
-
-<h4>Utilities</h4>
-<p>xournal planner abiword gnumeric pandoc cmake git tmux mc htop vim nano p7zip-full geany mousepad atril engrampa artha openmpi-bin python3-pip curl build-essential ffmpeg</p>
-<hr>
-
-<h3>Troubleshooting:</h3>
-<h4>Avogadro failed to launch:</h4>
-<p>Launch it by running <code>LIBGL_ALWAYS_SOFTWARE=1 avogadro</code> in the terminal.</p>
-
-<h4>Paraview failed to launch:</h4>
-<p>Launch it by running <code>SESSION_MANAGER="" LIBGL_ALWAYS_SOFTWARE=1 paraview</code> in the terminal.</p>
-
-<hr>
-<h3>Credit</h3>
-<p>v86: https://github.com/copy/v86</p>
-<p>All opensource software installed</p>
 <script>
 "use strict";
 
-/**
- * Load debian-state-base.bin.part1, part2, ...
- * Merge into a single Blob and return a Blob URL
- */
 async function createStateBlobUrl(baseName) {
-    const parts = [];
-    let index = 1;
+    const concurrency = 6;
+    let currentIndex = 1;
+    let maxIndex = Infinity; 
+    const buffers = [];
 
-    while (true) {
-        const url = `${baseName}.part${index}`;
-        try {
-            const resp = await fetch(url);
-            if (!resp.ok) break;
-            parts.push(await resp.arrayBuffer());
-            index++;
-        } catch (e) {
+    async function fetchWorker() {
+        while (true) {
+            const index = currentIndex++;
+
+            if (index > maxIndex) break;
+
+            const url = `${baseName}.part${index}`;
+            try {
+                const resp = await fetch(url);
+                if (!resp.ok) {
+                    maxIndex = Math.min(maxIndex, index - 1);
+                    break;
+                }
+                buffers[index - 1] = await resp.arrayBuffer();
+            } catch (e) {
+                maxIndex = Math.min(maxIndex, index - 1);
+                break;
+            }
+        }
+    }
+
+    const workers = [];
+    for (let i = 0; i < concurrency; i++) {
+        workers.push(fetchWorker());
+    }
+    
+    await Promise.all(workers);
+
+    const validParts = [];
+    for (let i = 0; i < buffers.length; i++) {
+        if (buffers[i]) {
+            validParts.push(buffers[i]);
+        } else {
             break;
         }
     }
 
-    const blob = new Blob(parts, { type: "application/octet-stream" });
+    const blob = new Blob(validParts, { type: "application/octet-stream" });
     return URL.createObjectURL(blob);
 }
 
 window.onload = async function () {
     try {
         const screen = document.getElementById("screen_container");
+        screen.addEventListener("mousedown", function() {
+            screen.focus();
+        });
 
-        // Merge the split state file
-        const stateUrl = await createStateBlobUrl(
-            "images/debian-state-base.bin"
-        );
+        const stateUrl = await createStateBlobUrl("images/debian-state-base.bin");
 
-        // Start v86
         const emulator = new V86({
             wasm_path: "build/v86.wasm",
-            memory_size: 1636 * 1024 * 1024,
+            memory_size: 1536 * 1024 * 1024,
             vga_memory_size: 8 * 1024 * 1024,
             screen_container: screen,
-
-            // IMPORTANT: use merged Blob URL here
             initial_state: { url: stateUrl },
-
-            filesystem: {
-                baseurl: "images/debian-9p-rootfs-flat/"
-            },
-
-            network_relay_url: "wss://relay.widgetry.org/",
+            filesystem: { baseurl: "images/debian-9p-rootfs-flat/" },
             autostart: true,
         });
 
-        // Add pointer lock listener to fix mouse tracking
-        const canvas = document.querySelector("canvas");
-        canvas.addEventListener("click", function() {
-            canvas.requestPointerLock();
-        });
+        function runCommandWithSentinel(cmd) {
+            return new Promise((resolve) => {
+                const sentinel = "V86_CMD_DONE";
+                let buffer = "";
+                
+                const listener = (byte) => {
+                    const char = String.fromCharCode(byte);
+                    buffer += char;
+                    if (buffer.includes(sentinel)) {
+                        emulator.remove_listener("serial0-output-byte", listener);
+                        resolve();
+                    }
+                };
 
-        document.getElementById("btn_upload_files").onchange = function(e) {
+                emulator.add_listener("serial0-output-byte", listener);
+                emulator.serial0_send(`${cmd}; echo "${sentinel}"\n`);
+            });
+        }
+
+        document.getElementById("upload_files").onchange = function(e) {
             var files = e.target.files;
             var path = document.getElementById("upload_path").value;
             if (path.slice(0, 1) !== "/") path = "/" + path;
@@ -163,19 +135,21 @@ window.onload = async function () {
                 var reader = new FileReader();
                 reader.onload = function(file) {
                     return function(e) {
-                        var data = (new TextEncoder('UTF-8')).encode(e.target.result);
+                        // Use Uint8Array to handle raw binary bytes safely
+                        var data = new Uint8Array(e.target.result);
                         emulator.create_file(path + file.name, data);
                         console.log("uploaded " + file.name + " to " + path + file.name);
                     }
                 }(files[i]);
-                reader.readAsText(files[i]);
+                // Read as ArrayBuffer
+                reader.readAsArrayBuffer(files[i]);
             }
             this.blur();
             screen.focus();
         };
         
         document.getElementById("btn_download_file").onclick = async function() {
-            const path = document.getElementById("download_path").value;
+            let path = document.getElementById("download_path").value;
             if (path.slice(0, 1) !== "/") path = "/" + path;
             try {
                 const data = await emulator.read_file(path);
@@ -200,9 +174,89 @@ window.onload = async function () {
             screen.focus();
         };
 
+        // Github Repo Import
+        document.getElementById("btn_import_repo").onclick = async function() {
+            const urlInput = document.getElementById("repo_url").value;
+            const branch = document.getElementById("repo_branch").value;
+            let targetPath = document.getElementById("repo_import_path").value;
+            const statusLabel = document.getElementById("import_status");
+
+            if (targetPath.slice(0, 1) !== "/") targetPath = "/" + targetPath;
+            if (targetPath.slice(-1) !== "/") targetPath += "/";
+
+            const match = urlInput.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+            if(!match) { alert("Invalid GitHub URL."); return; }
+            const [ , owner, repo] = match;
+
+            try {
+                this.disabled = true;
+                statusLabel.innerText = "Fetching file list...";
+                
+                // Fetch Recursive Tree
+                const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
+                const treeResp = await fetch(treeUrl);
+                if (!treeResp.ok) throw new Error("Branch not found or API limit hit");
+                const treeData = await treeResp.json();
+
+                // Identify Directories and Files
+                const uniqueDirs = new Set();
+                const filesToDownload = [];
+
+                treeData.tree.forEach(item => {
+                    if (item.type === "blob") {
+                        const fullPath = targetPath + item.path;
+                        filesToDownload.push({ 
+                            path: item.path, // relative path for fetching
+                            fullPath: fullPath 
+                        });
+
+                        // Extract directory from path
+                        const parts = item.path.split('/');
+                        if (parts.length > 1) {
+                            parts.pop(); // remove filename
+                            // Add full path to directory set
+                            uniqueDirs.add(targetPath + parts.join('/'));
+                        }
+                    }
+                });
+
+                // Create Directories
+                if (uniqueDirs.size > 0) {
+                    statusLabel.innerText = `Creating ${uniqueDirs.size} folders...`;
+                    const dirList = Array.from(uniqueDirs).map(d => `"${d}"`).join(' ');
+                    await runCommandWithSentinel(`mkdir -p ${dirList}`);
+                }
+
+                // Download and Write Files
+                let count = 0;
+                statusLabel.innerText = `Downloading ${filesToDownload.length} files...`;
+
+                for (const file of filesToDownload) {
+                    const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${file.path}`;
+                    const fileResp = await fetch(rawUrl);
+                    if (fileResp.ok) {
+                        const content = await fileResp.arrayBuffer();
+                        emulator.create_file(file.fullPath, new Uint8Array(content));
+                        count++;
+                        statusLabel.innerText = `Importing: ${count}/${filesToDownload.length}`;
+                    }
+                }
+
+                statusLabel.innerText = `Done! Imported ${count} files.`;
+
+            } catch (err) {
+                console.error(err);
+                statusLabel.innerText = "Error: " + err.message;
+            } finally {
+                this.disabled = false;
+                this.blur();
+                screen.focus();
+            }
+        };
+
     } catch (e) {
         console.error(e);
-        alert("Failed to load Debian state: " + e.message);
+        alert("Failed to load: " + e.message);
     }
 };
 </script>
