@@ -8,6 +8,7 @@ How to build:
 - run `cd tools/docker/LinuxDE`
 - run `./build.sh`
 - run `./build-state.js`
+- run `zstd -19 ../../../images/debian-state-base.bin -o ../../../images/debian-state-base.bin.zst`
 - run `cp split.sh ../../../images/split.sh`
 - run `cd ../../../images`
 - run `./split.sh`
